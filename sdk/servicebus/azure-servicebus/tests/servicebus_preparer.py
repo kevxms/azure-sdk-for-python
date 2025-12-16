@@ -164,6 +164,26 @@ class ServiceBusNamespacePreparer(AzureMgmtPreparer):
         self.resource_group_parameter_name = resource_group_parameter_name
         self.parameter_name = parameter_name
         self.connection_string = ""
+        
+        # Check for existing namespace from environment variables
+        self._need_creation = True
+        env_conn_str = os.environ.get("SERVICEBUS_CONNECTION_STR", None)
+        env_fqdn = os.environ.get("SERVICEBUS_FULLY_QUALIFIED_NAMESPACE", None)
+
+        # Validate that both or neither env vars are set
+        if bool(env_conn_str) != bool(env_fqdn):
+            raise AzureTestError(
+                "Both SERVICEBUS_CONNECTION_STR and SERVICEBUS_FULLY_QUALIFIED_NAMESPACE must be set together, "
+                f"or neither should be set. Currently: SERVICEBUS_CONNECTION_STR={'set' if env_conn_str else 'not set'}, "
+                f"SERVICEBUS_FULLY_QUALIFIED_NAMESPACE={'set' if env_fqdn else 'not set'}"
+            )
+        
+        if env_conn_str and env_fqdn:
+            # Extract namespace name from FQDN (e.g., "myns.servicebus.windows.net" -> "myns")
+            self._existing_namespace_name = env_fqdn.split(".")[0]
+            self._existing_connection_string = env_conn_str
+            self._need_creation = False
+        
         if random_name_enabled:
             self.resource_moniker = self.name_prefix + "sbname"
 
@@ -171,35 +191,47 @@ class ServiceBusNamespacePreparer(AzureMgmtPreparer):
 
     def create_resource(self, name, **kwargs):
         if self.is_live:
-            self.client = self.create_mgmt_client(
-                ServiceBusManagementClient, base_url=BASE_URL, credential_scopes=CREDENTIAL_SCOPES
-            )
-            group = self._get_resource_group(**kwargs)
-            retries = 4
-            for i in range(retries):
-                try:
-                    namespace_async_operation = self.client.namespaces.begin_create_or_update(
-                        group.name,
-                        name,
-                        {
-                            "sku": {"name": self.sku},
-                            "location": self.location,
-                            "disableLocalAuth": self.disable_local_auth,
-                        },
-                    )
-                    self.resource = namespace_async_operation.result()
-                    break
-                except Exception as ex:
-                    error = "The requested resource {} does not exist".format(group.name)
-                    not_found_error = "Operation returned an invalid status code 'Not Found'"
-                    if (error not in str(ex) and not_found_error not in str(ex)) or i == retries - 1:
-                        raise
-                    time.sleep(3)
+            # Use existing namespace if provided via environment variables
+            if not self._need_creation:
+                self.resource = FakeResource(
+                    name=self._existing_namespace_name,
+                    id=f"/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/placeholder/providers/Microsoft.ServiceBus/namespaces/{self._existing_namespace_name}"
+                )
+                self.connection_string = self._existing_connection_string
+                # Extract key name and key from connection string
+                conn_parts = dict(part.split("=", 1) for part in self.connection_string.rstrip(";").split(";") if "=" in part)
+                self.key_name = conn_parts.get("SharedAccessKeyName", SERVICEBUS_DEFAULT_AUTH_RULE_NAME)
+                self.primary_key = conn_parts.get("SharedAccessKey", "")
+            else:
+                self.client = self.create_mgmt_client(
+                    ServiceBusManagementClient, base_url=BASE_URL, credential_scopes=CREDENTIAL_SCOPES
+                )
+                group = self._get_resource_group(**kwargs)
+                retries = 4
+                for i in range(retries):
+                    try:
+                        namespace_async_operation = self.client.namespaces.begin_create_or_update(
+                            group.name,
+                            name,
+                            {
+                                "sku": {"name": self.sku},
+                                "location": self.location,
+                                "disableLocalAuth": self.disable_local_auth,
+                            },
+                        )
+                        self.resource = namespace_async_operation.result()
+                        break
+                    except Exception as ex:
+                        error = "The requested resource {} does not exist".format(group.name)
+                        not_found_error = "Operation returned an invalid status code 'Not Found'"
+                        if (error not in str(ex) and not_found_error not in str(ex)) or i == retries - 1:
+                            raise
+                        time.sleep(3)
 
-            key = self.client.namespaces.list_keys(group.name, name, SERVICEBUS_DEFAULT_AUTH_RULE_NAME)
-            self.connection_string = key.primary_connection_string
-            self.key_name = key.key_name
-            self.primary_key = key.primary_key
+                key = self.client.namespaces.list_keys(group.name, name, SERVICEBUS_DEFAULT_AUTH_RULE_NAME)
+                self.connection_string = key.primary_connection_string
+                self.key_name = key.key_name
+                self.primary_key = key.primary_key
         else:
             self.resource = FakeResource(name=name, id=name)
             self.connection_string = f"Endpoint=sb://{name}{SERVICEBUS_ENDPOINT_SUFFIX}/;SharedAccessKeyName=test;SharedAccessKey=THISISATESTKEYXXXXXXXXXXXXXXXXXXXXXXXXXXXX="
@@ -213,7 +245,8 @@ class ServiceBusNamespacePreparer(AzureMgmtPreparer):
         }
 
     def remove_resource(self, name, **kwargs):
-        if self.is_live:
+        # Don't delete if using existing namespace from environment variables
+        if self.is_live and self._need_creation:
             group = self._get_resource_group(**kwargs)
             self.client.namespaces.delete(group.name, name)
 

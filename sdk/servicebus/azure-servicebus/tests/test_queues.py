@@ -1433,13 +1433,15 @@ class TestServiceBusQueue(AzureMgmtRecordedTestCase):
             fully_qualified_namespace, credential, logging_enable=False, uamqp_transport=uamqp_transport
         ) as sb_client:
 
-            too_large = "A" * 256 * 1024
+            # 101 MB - exceeds Premium SKU max of 100 MB
+            too_large = "A" * 101 * 1024 * 1024
 
-            with sb_client.get_queue_sender(servicebus_queue.name, socket_timeout=0.5) as sender:
+            with sb_client.get_queue_sender(servicebus_queue.name, socket_timeout=30) as sender:
                 with pytest.raises(MessageSizeExceededError):
                     sender.send_messages(ServiceBusMessage(too_large))
 
-                half_too_large = "A" * int((1024 * 256) / 2)
+                # Two 51 MB messages - combined exceeds 100 MB limit
+                half_too_large = "A" * 51 * 1024 * 1024
                 with pytest.raises(MessageSizeExceededError):
                     sender.send_messages([ServiceBusMessage(half_too_large), ServiceBusMessage(half_too_large)])
 
