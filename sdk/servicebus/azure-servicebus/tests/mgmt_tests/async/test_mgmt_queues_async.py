@@ -296,10 +296,12 @@ class TestServiceBusAdministrationClientQueueAsync(AzureMgmtRecordedTestCase):
             requires_session=True,
         )
 
-        with pytest.raises(HttpResponseError):
-            await mgmt_service.create_queue(
-                queue_name_3, max_message_size_in_kilobytes=1024  # basic/standard ties does not support
-            )
+        if not is_premium:
+            # Premium tier supports max_message_size_in_kilobytes, so only test error on Standard
+            with pytest.raises(HttpResponseError):
+                await mgmt_service.create_queue(
+                    queue_name_3, max_message_size_in_kilobytes=1024  # basic/standard tiers do not support
+                )
 
         try:
             queue = await mgmt_service.get_queue(queue_name)

@@ -117,10 +117,12 @@ class TestServiceBusAdministrationClientTopicAsync(AzureMgmtRecordedTestCase):
             assert topic_2.enable_partitioning == (False if is_premium else True)
             assert topic_2.max_size_in_megabytes % 3072 == 0
 
-            with pytest.raises(HttpResponseError):
-                await mgmt_service.create_topic(
-                    topic_name_3, max_message_size_in_kilobytes=1024  # basic/standard ties does not support
-                )
+            if not is_premium:
+                # Premium tier supports max_message_size_in_kilobytes, so only test error on Standard
+                with pytest.raises(HttpResponseError):
+                    await mgmt_service.create_topic(
+                        topic_name_3, max_message_size_in_kilobytes=1024  # basic/standard tiers do not support
+                    )
 
         finally:
             await mgmt_service.delete_topic(topic_name)
