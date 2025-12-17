@@ -15,7 +15,7 @@ from azure.core.exceptions import HttpResponseError, ResourceExistsError
 from devtools_testutils import AzureMgmtRecordedTestCase, CachedResourceGroupPreparer, recorded_by_proxy, get_credential
 from sb_env_loader import ServiceBusPreparer
 
-from mgmt_test_utilities import clear_topics
+from mgmt_test_utilities import clear_topics, is_premium_namespace
 
 _logger = get_logger(logging.DEBUG)
 
@@ -52,15 +52,18 @@ class TestServiceBusAdministrationClientTopicTests(AzureMgmtRecordedTestCase):
         topic_name_2 = "djsadq"
         topic_name_3 = "famviq"
 
+        # Premium tier does not support enable_express or enable_partitioning
+        is_premium = is_premium_namespace(mgmt_service)
+
         try:
             mgmt_service.create_topic(
-                topic_name=topic_name,
+                topic_name,
                 auto_delete_on_idle=datetime.timedelta(minutes=10),
                 default_message_time_to_live=datetime.timedelta(minutes=11),
                 duplicate_detection_history_time_window=datetime.timedelta(minutes=12),
                 enable_batched_operations=True,
-                enable_express=True,
-                enable_partitioning=True,
+                enable_express=False if is_premium else True,
+                enable_partitioning=False if is_premium else True,
                 max_size_in_megabytes=3072,
             )
             topic = mgmt_service.get_topic(topic_name)
@@ -69,18 +72,18 @@ class TestServiceBusAdministrationClientTopicTests(AzureMgmtRecordedTestCase):
             assert topic.default_message_time_to_live == datetime.timedelta(minutes=11)
             assert topic.duplicate_detection_history_time_window == datetime.timedelta(minutes=12)
             assert topic.enable_batched_operations
-            assert topic.enable_express
-            assert topic.enable_partitioning
+            assert topic.enable_express == (False if is_premium else True)
+            assert topic.enable_partitioning == (False if is_premium else True)
             assert topic.max_size_in_megabytes % 3072 == 0
 
             mgmt_service.create_topic(
-                topic_name=topic_name_2,
+                topic_name_2,
                 auto_delete_on_idle="PT10M",
                 default_message_time_to_live="PT11M",
                 duplicate_detection_history_time_window="PT12M",
                 enable_batched_operations=True,
-                enable_express=True,
-                enable_partitioning=True,
+                enable_express=False if is_premium else True,
+                enable_partitioning=False if is_premium else True,
                 max_size_in_megabytes=3072,
             )
             topic_2 = mgmt_service.get_topic(topic_name_2)
@@ -89,8 +92,8 @@ class TestServiceBusAdministrationClientTopicTests(AzureMgmtRecordedTestCase):
             assert topic_2.default_message_time_to_live == datetime.timedelta(minutes=11)
             assert topic_2.duplicate_detection_history_time_window == datetime.timedelta(minutes=12)
             assert topic_2.enable_batched_operations
-            assert topic_2.enable_express
-            assert topic_2.enable_partitioning
+            assert topic_2.enable_express == (False if is_premium else True)
+            assert topic_2.enable_partitioning == (False if is_premium else True)
             assert topic_2.max_size_in_megabytes % 3072 == 0
 
             with pytest.raises(HttpResponseError):
@@ -199,6 +202,9 @@ class TestServiceBusAdministrationClientTopicTests(AzureMgmtRecordedTestCase):
         clear_topics(mgmt_service)
         topic_name = "fjrui"
 
+        # Premium tier does not support enable_express
+        is_premium = is_premium_namespace(mgmt_service)
+
         try:
             topic_description = mgmt_service.create_topic(topic_name)
 
@@ -213,7 +219,7 @@ class TestServiceBusAdministrationClientTopicTests(AzureMgmtRecordedTestCase):
             topic_description.default_message_time_to_live = datetime.timedelta(minutes=11)
             topic_description.duplicate_detection_history_time_window = datetime.timedelta(minutes=12)
             topic_description.enable_batched_operations = True
-            topic_description.enable_express = True
+            topic_description.enable_express = False if is_premium else True
             # topic_description.enable_partitioning = True # Cannot be changed after creation
             topic_description.max_size_in_megabytes = 3072
             # topic_description.requires_duplicate_detection = True # Read only
@@ -227,7 +233,7 @@ class TestServiceBusAdministrationClientTopicTests(AzureMgmtRecordedTestCase):
             assert topic_description.default_message_time_to_live == datetime.timedelta(minutes=11)
             assert topic_description.duplicate_detection_history_time_window == datetime.timedelta(minutes=12)
             assert topic_description.enable_batched_operations == True
-            assert topic_description.enable_express == True
+            assert topic_description.enable_express == (False if is_premium else True)
             # assert topic_description.enable_partitioning == True
             assert topic_description.max_size_in_megabytes == 3072
             # assert topic_description.requires_duplicate_detection == True
@@ -432,6 +438,9 @@ class TestServiceBusAdministrationClientTopicTests(AzureMgmtRecordedTestCase):
         clear_topics(mgmt_service)
         topic_name = "fjruid"
 
+        # Premium tier does not support enable_express
+        is_premium = is_premium_namespace(mgmt_service)
+
         try:
             topic_description = mgmt_service.create_topic(topic_name)
             topic_description_dict = dict(topic_description)
@@ -448,7 +457,7 @@ class TestServiceBusAdministrationClientTopicTests(AzureMgmtRecordedTestCase):
             topic_description_dict["default_message_time_to_live"] = datetime.timedelta(minutes=11)
             topic_description_dict["duplicate_detection_history_time_window"] = datetime.timedelta(minutes=12)
             topic_description_dict["enable_batched_operations"] = True
-            topic_description_dict["enable_express"] = True
+            topic_description_dict["enable_express"] = False if is_premium else True
             # topic_description_dict["enable_partitioning"] = True # Cannot be changed after creation
             topic_description_dict["max_size_in_megabytes"] = 3072
             # topic_description_dict["requires_duplicate_detection"] = True # Read only
@@ -462,7 +471,7 @@ class TestServiceBusAdministrationClientTopicTests(AzureMgmtRecordedTestCase):
             assert topic_description.default_message_time_to_live == datetime.timedelta(minutes=11)
             assert topic_description.duplicate_detection_history_time_window == datetime.timedelta(minutes=12)
             assert topic_description.enable_batched_operations == True
-            assert topic_description.enable_express == True
+            assert topic_description.enable_express == (False if is_premium else True)
             # assert topic_description.enable_partitioning == True
             assert topic_description.max_size_in_megabytes == 3072
             # assert topic_description.requires_duplicate_detection == True

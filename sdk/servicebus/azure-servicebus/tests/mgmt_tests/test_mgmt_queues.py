@@ -31,6 +31,7 @@ from mgmt_test_utilities import (
     run_test_mgmt_list_with_negative_parameters,
     clear_queues,
     clear_topics,
+    is_premium_namespace,
 )
 
 _logger = get_logger(logging.DEBUG)
@@ -272,6 +273,9 @@ class TestServiceBusAdministrationClientQueue(AzureMgmtRecordedTestCase):
         queue_name_3 = "famviq"
         topic_name = "aghadh"
 
+        # Premium tier does not support enable_express or enable_partitioning
+        is_premium = is_premium_namespace(mgmt_service)
+
         def generate_random_key():
             key256 = secrets.token_bytes(32)
             return base64.b64encode(key256).decode('utf-8')
@@ -296,8 +300,8 @@ class TestServiceBusAdministrationClientQueue(AzureMgmtRecordedTestCase):
             default_message_time_to_live=datetime.timedelta(minutes=11),
             duplicate_detection_history_time_window=datetime.timedelta(minutes=12),
             enable_batched_operations=True,
-            enable_express=True,
-            enable_partitioning=True,
+            enable_express=False if is_premium else True,
+            enable_partitioning=False if is_premium else True,
             forward_dead_lettered_messages_to=topic_name,
             forward_to=topic_name,
             lock_duration=datetime.timedelta(seconds=13),
@@ -315,8 +319,8 @@ class TestServiceBusAdministrationClientQueue(AzureMgmtRecordedTestCase):
             default_message_time_to_live="PT11M2S",
             duplicate_detection_history_time_window="PT12M3S",
             enable_batched_operations=True,
-            enable_express=True,
-            enable_partitioning=True,
+            enable_express=False if is_premium else True,
+            enable_partitioning=False if is_premium else True,
             forward_dead_lettered_messages_to=topic_name,
             forward_to=topic_name,
             lock_duration="PT13S",
@@ -325,10 +329,16 @@ class TestServiceBusAdministrationClientQueue(AzureMgmtRecordedTestCase):
             requires_session=True,
         )
 
-        with pytest.raises(HttpResponseError):
+        if is_premium:
+            # Premium tier supports max_message_size_in_kilobytes
             mgmt_service.create_queue(
-                queue_name_3, max_message_size_in_kilobytes=1024  # basic/standard ties does not support
+                queue_name_3, max_message_size_in_kilobytes=1024
             )
+        else:
+            with pytest.raises(HttpResponseError):
+                mgmt_service.create_queue(
+                    queue_name_3, max_message_size_in_kilobytes=1024  # basic/standard ties does not support
+                )
 
         try:
             queue = mgmt_service.get_queue(queue_name)
@@ -338,8 +348,8 @@ class TestServiceBusAdministrationClientQueue(AzureMgmtRecordedTestCase):
             assert queue.default_message_time_to_live == datetime.timedelta(minutes=11)
             assert queue.duplicate_detection_history_time_window == datetime.timedelta(minutes=12)
             assert queue.enable_batched_operations == True
-            assert queue.enable_express == True
-            assert queue.enable_partitioning == True
+            assert queue.enable_express == (False if is_premium else True)
+            assert queue.enable_partitioning == (False if is_premium else True)
             # assert queue.forward_dead_lettered_messages_to.endswith(f"{SERVICEBUS_ENDPOINT_SUFFIX}/{topic_name}")
             # assert queue.forward_to.endswith(f"{SERVICEBUS_ENDPOINT_SUFFIX}/{topic_name}")
             assert queue.lock_duration == datetime.timedelta(seconds=13)
@@ -362,8 +372,8 @@ class TestServiceBusAdministrationClientQueue(AzureMgmtRecordedTestCase):
             assert queue2.default_message_time_to_live == datetime.timedelta(minutes=11, seconds=2)
             assert queue2.duplicate_detection_history_time_window == datetime.timedelta(minutes=12, seconds=3)
             assert queue2.enable_batched_operations == True
-            assert queue2.enable_express == True
-            assert queue2.enable_partitioning == True
+            assert queue2.enable_express == (False if is_premium else True)
+            assert queue2.enable_partitioning == (False if is_premium else True)
             assert queue2.forward_dead_lettered_messages_to.endswith(f"{SERVICEBUS_ENDPOINT_SUFFIX}/{topic_name}")
             # assert queue2.forward_to.endswith(f"{SERVICEBUS_ENDPOINT_SUFFIX}/{topic_name}")
             assert queue2.lock_duration == datetime.timedelta(seconds=13)
@@ -374,6 +384,8 @@ class TestServiceBusAdministrationClientQueue(AzureMgmtRecordedTestCase):
         finally:
             mgmt_service.delete_queue(queue_name)
             mgmt_service.delete_queue(queue_name_2)
+            if is_premium:
+                mgmt_service.delete_queue(queue_name_3)
             mgmt_service.delete_topic(topic_name)
             mgmt_service.close()
 
@@ -501,6 +513,10 @@ class TestServiceBusAdministrationClientQueue(AzureMgmtRecordedTestCase):
         clear_queues(mgmt_service)
         queue_name = "fjrui"
         topic_name = "sagho"
+
+        # Premium tier does not support enable_express
+        is_premium = is_premium_namespace(mgmt_service)
+
         queue_description = mgmt_service.create_queue(queue_name)
         mgmt_service.create_topic(topic_name)
         def generate_random_key():
@@ -554,7 +570,7 @@ class TestServiceBusAdministrationClientQueue(AzureMgmtRecordedTestCase):
             queue_description.default_message_time_to_live = datetime.timedelta(minutes=11)
             queue_description.duplicate_detection_history_time_window = datetime.timedelta(minutes=12)
             queue_description.enable_batched_operations = True
-            queue_description.enable_express = True
+            queue_description.enable_express = False if is_premium else True
             # queue_description.enable_partitioning = True # Cannot be changed after creation
             queue_description.lock_duration = datetime.timedelta(seconds=13)
             queue_description.max_delivery_count = 14
@@ -574,7 +590,7 @@ class TestServiceBusAdministrationClientQueue(AzureMgmtRecordedTestCase):
             assert queue_description.default_message_time_to_live == datetime.timedelta(minutes=11)
             assert queue_description.duplicate_detection_history_time_window == datetime.timedelta(minutes=12)
             assert queue_description.enable_batched_operations == True
-            assert queue_description.enable_express == True
+            assert queue_description.enable_express == (False if is_premium else True)
             # assert queue_description.enable_partitioning == True
             assert queue_description.lock_duration == datetime.timedelta(seconds=13)
             assert queue_description.max_delivery_count == 14
@@ -800,6 +816,10 @@ class TestServiceBusAdministrationClientQueue(AzureMgmtRecordedTestCase):
         )
         clear_queues(mgmt_service)
         queue_name = "fjruid"
+
+        # Premium tier does not support enable_express
+        is_premium = is_premium_namespace(mgmt_service)
+
         queue_description = mgmt_service.create_queue(queue_name)
         queue_description_dict = dict(queue_description)
         try:
@@ -817,7 +837,7 @@ class TestServiceBusAdministrationClientQueue(AzureMgmtRecordedTestCase):
             queue_description_dict["default_message_time_to_live"] = datetime.timedelta(minutes=11)
             queue_description_dict["duplicate_detection_history_time_window"] = datetime.timedelta(minutes=12)
             queue_description_dict["enable_batched_operations"] = True
-            queue_description_dict["enable_express"] = True
+            queue_description_dict["enable_express"] = False if is_premium else True
             # queue_description_dict["enable_partitioning"] = True # Cannot be changed after creation
             queue_description_dict["lock_duration"] = datetime.timedelta(seconds=13)
             queue_description_dict["max_delivery_count"] = 14
@@ -837,7 +857,7 @@ class TestServiceBusAdministrationClientQueue(AzureMgmtRecordedTestCase):
             assert queue_description.default_message_time_to_live == datetime.timedelta(minutes=11)
             assert queue_description.duplicate_detection_history_time_window == datetime.timedelta(minutes=12)
             assert queue_description.enable_batched_operations == True
-            assert queue_description.enable_express == True
+            assert queue_description.enable_express == (False if is_premium else True)
             # assert queue_description.enable_partitioning == True
             assert queue_description.lock_duration == datetime.timedelta(seconds=13)
             assert queue_description.max_delivery_count == 14

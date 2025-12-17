@@ -139,3 +139,19 @@ def clear_topics(servicebus_management_client):
             servicebus_management_client.delete_topic(topic.name)
         except:
             pass
+
+
+def is_premium_namespace(servicebus_management_client):
+    try:
+        props = servicebus_management_client.get_namespace_properties()
+        return props.messaging_sku == "Premium"
+    except Exception:
+        return False
+
+
+async def is_premium_namespace_async(servicebus_management_client):
+    try:
+        props = await servicebus_management_client.get_namespace_properties()
+        return props.messaging_sku == "Premium"
+    except Exception:
+        return False

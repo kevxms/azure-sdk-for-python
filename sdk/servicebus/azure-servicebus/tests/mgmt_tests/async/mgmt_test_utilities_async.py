@@ -150,3 +150,11 @@ async def clear_topics(servicebus_management_client):
             await servicebus_management_client.delete_topic(topic.name)
         except:
             pass
+
+
+async def is_premium_namespace(mgmt_service):
+    try:
+        properties = await mgmt_service.get_namespace_properties()
+        return properties.messaging_sku == "Premium"
+    except Exception:
+        return False

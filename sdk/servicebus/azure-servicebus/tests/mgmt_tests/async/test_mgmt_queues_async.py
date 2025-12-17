@@ -25,6 +25,7 @@ from mgmt_test_utilities_async import (
     run_test_async_mgmt_list_with_negative_parameters,
     async_pageable_to_list,
     clear_queues,
+    is_premium_namespace,
 )
 
 
@@ -256,6 +257,10 @@ class TestServiceBusAdministrationClientQueueAsync(AzureMgmtRecordedTestCase):
         queue_name_2 = "vjiqjx"
         queue_name_3 = "clpqza"
         topic_name = "aghadh"
+
+        # Premium tier does not support enable_express or enable_partitioning
+        is_premium = await is_premium_namespace(mgmt_service)
+
         await mgmt_service.create_topic(topic_name)
         await mgmt_service.create_queue(
             queue_name,
@@ -266,12 +271,11 @@ class TestServiceBusAdministrationClientQueueAsync(AzureMgmtRecordedTestCase):
             forward_dead_lettered_messages_to=topic_name,
             forward_to=topic_name,
             enable_batched_operations=True,
-            enable_express=True,
-            enable_partitioning=True,
+            enable_express=False if is_premium else True,
+            enable_partitioning=False if is_premium else True,
             lock_duration=datetime.timedelta(seconds=13),
             max_delivery_count=14,
             max_size_in_megabytes=3072,
-            # requires_duplicate_detection=True,
             requires_session=True,
         )
 
@@ -282,8 +286,8 @@ class TestServiceBusAdministrationClientQueueAsync(AzureMgmtRecordedTestCase):
             default_message_time_to_live="PT11M2S",
             duplicate_detection_history_time_window="PT12M3S",
             enable_batched_operations=True,
-            enable_express=True,
-            enable_partitioning=True,
+            enable_express=False if is_premium else True,
+            enable_partitioning=False if is_premium else True,
             forward_dead_lettered_messages_to=topic_name,
             forward_to=topic_name,
             lock_duration="PT13S",
@@ -307,8 +311,8 @@ class TestServiceBusAdministrationClientQueueAsync(AzureMgmtRecordedTestCase):
             assert queue.enable_batched_operations == True
             assert queue.forward_dead_lettered_messages_to.endswith(f"{SERVICEBUS_ENDPOINT_SUFFIX}/{topic_name}")
             assert queue.forward_to.endswith(f"{SERVICEBUS_ENDPOINT_SUFFIX}/{topic_name}")
-            assert queue.enable_express == True
-            assert queue.enable_partitioning == True
+            assert queue.enable_express == (False if is_premium else True)
+            assert queue.enable_partitioning == (False if is_premium else True)
             assert queue.lock_duration == datetime.timedelta(seconds=13)
             assert queue.max_delivery_count == 14
             assert queue.max_size_in_megabytes % 3072 == 0
@@ -322,8 +326,8 @@ class TestServiceBusAdministrationClientQueueAsync(AzureMgmtRecordedTestCase):
             assert queue2.default_message_time_to_live == datetime.timedelta(minutes=11, seconds=2)
             assert queue2.duplicate_detection_history_time_window == datetime.timedelta(minutes=12, seconds=3)
             assert queue2.enable_batched_operations == True
-            assert queue2.enable_express == True
-            assert queue2.enable_partitioning == True
+            assert queue2.enable_express == (False if is_premium else True)
+            assert queue2.enable_partitioning == (False if is_premium else True)
             assert queue2.forward_dead_lettered_messages_to.endswith(f"{SERVICEBUS_ENDPOINT_SUFFIX}/{topic_name}")
             assert queue2.forward_to.endswith(f"{SERVICEBUS_ENDPOINT_SUFFIX}/{topic_name}")
             assert queue2.lock_duration == datetime.timedelta(seconds=13)
@@ -456,6 +460,10 @@ class TestServiceBusAdministrationClientQueueAsync(AzureMgmtRecordedTestCase):
         await clear_queues(mgmt_service)
         queue_name = "ewuidfj"
         topic_name = "dkfjaks"
+
+        # Premium tier does not support enable_express
+        is_premium = await is_premium_namespace(mgmt_service)
+
         queue_description = await mgmt_service.create_queue(queue_name)
         await mgmt_service.create_topic(topic_name)
 
@@ -492,7 +500,7 @@ class TestServiceBusAdministrationClientQueueAsync(AzureMgmtRecordedTestCase):
             queue_description.default_message_time_to_live = datetime.timedelta(minutes=11)
             queue_description.duplicate_detection_history_time_window = datetime.timedelta(minutes=12)
             queue_description.enable_batched_operations = True
-            queue_description.enable_express = True
+            queue_description.enable_express = False if is_premium else True
             # queue_description.enable_partitioning = True # Cannot be changed after creation
             queue_description.lock_duration = datetime.timedelta(seconds=13)
             queue_description.max_delivery_count = 14
@@ -512,7 +520,7 @@ class TestServiceBusAdministrationClientQueueAsync(AzureMgmtRecordedTestCase):
             assert queue_description.default_message_time_to_live == datetime.timedelta(minutes=11)
             assert queue_description.duplicate_detection_history_time_window == datetime.timedelta(minutes=12)
             assert queue_description.enable_batched_operations == True
-            assert queue_description.enable_express == True
+            assert queue_description.enable_express == (False if is_premium else True)
             # assert queue_description.enable_partitioning == True
             assert queue_description.lock_duration == datetime.timedelta(seconds=13)
             assert queue_description.max_delivery_count == 14
@@ -731,6 +739,10 @@ class TestServiceBusAdministrationClientQueueAsync(AzureMgmtRecordedTestCase):
         )
         await clear_queues(mgmt_service)
         queue_name = "fjruid"
+
+        # Premium tier does not support enable_express
+        is_premium = await is_premium_namespace(mgmt_service)
+
         queue_description = await mgmt_service.create_queue(queue_name)
         queue_description_dict = dict(queue_description)
         try:
@@ -748,7 +760,7 @@ class TestServiceBusAdministrationClientQueueAsync(AzureMgmtRecordedTestCase):
             queue_description_dict["default_message_time_to_live"] = datetime.timedelta(minutes=11)
             queue_description_dict["duplicate_detection_history_time_window"] = datetime.timedelta(minutes=12)
             queue_description_dict["enable_batched_operations"] = True
-            queue_description_dict["enable_express"] = True
+            queue_description_dict["enable_express"] = False if is_premium else True
             # queue_description_dict["enable_partitioning"] = True # Cannot be changed after creation
             queue_description_dict["lock_duration"] = datetime.timedelta(seconds=13)
             queue_description_dict["max_delivery_count"] = 14
@@ -768,7 +780,7 @@ class TestServiceBusAdministrationClientQueueAsync(AzureMgmtRecordedTestCase):
             assert queue_description.default_message_time_to_live == datetime.timedelta(minutes=11)
             assert queue_description.duplicate_detection_history_time_window == datetime.timedelta(minutes=12)
             assert queue_description.enable_batched_operations == True
-            assert queue_description.enable_express == True
+            assert queue_description.enable_express == (False if is_premium else True)
             # assert queue_description.enable_partitioning == True
             assert queue_description.lock_duration == datetime.timedelta(seconds=13)
             assert queue_description.max_delivery_count == 14
@@ -789,7 +801,7 @@ class TestServiceBusAdministrationClientQueueAsync(AzureMgmtRecordedTestCase):
                 default_message_time_to_live=datetime.timedelta(minutes=16),
                 duplicate_detection_history_time_window=datetime.timedelta(minutes=17),
                 enable_batched_operations=False,
-                enable_express=False,
+                enable_express=False if is_premium else True,
                 lock_duration=datetime.timedelta(seconds=18),
                 max_delivery_count=15,
                 max_size_in_megabytes=2048,
@@ -802,7 +814,7 @@ class TestServiceBusAdministrationClientQueueAsync(AzureMgmtRecordedTestCase):
             assert queue_description.default_message_time_to_live == datetime.timedelta(minutes=16)
             assert queue_description.duplicate_detection_history_time_window == datetime.timedelta(minutes=17)
             assert queue_description.enable_batched_operations == False
-            assert queue_description.enable_express == False
+            assert queue_description.enable_express == (False if is_premium else True)
             # assert queue_description.enable_partitioning == True
             assert queue_description.lock_duration == datetime.timedelta(seconds=18)
             assert queue_description.max_delivery_count == 15
