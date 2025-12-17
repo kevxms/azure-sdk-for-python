@@ -27,6 +27,7 @@ try:
 except:
     PyamqpTransportAsync = None
 from azure.servicebus.aio import ServiceBusClient, AutoLockRenewer
+from azure.servicebus.aio.management import ServiceBusAdministrationClient
 from azure.servicebus import (
     ServiceBusMessage,
     ServiceBusMessageBatch,
@@ -1690,17 +1691,34 @@ class TestServiceBusQueueAsync(AzureMgmtRecordedTestCase):
     ):
         fully_qualified_namespace = f"{servicebus_namespace.name}{SERVICEBUS_ENDPOINT_SUFFIX}"
         credential = get_credential(is_async=True)
+
+        # Check if Premium namespace to determine message size limits
+        async with ServiceBusAdministrationClient(
+            fully_qualified_namespace=fully_qualified_namespace, credential=credential
+        ) as mgmt_client:
+            properties = await mgmt_client.get_namespace_properties()
+            is_premium = properties.messaging_sku == "Premium"
+
         async with ServiceBusClient(
             fully_qualified_namespace, credential, logging_enable=False, uamqp_transport=uamqp_transport
         ) as sb_client:
 
-            too_large = "A" * 1024 * 256
+            if is_premium:
+                # 101 MB - exceeds Premium SKU max of 100 MB
+                too_large = "A" * 101 * 1024 * 1024
+            else:
+                # 256 KB - exceeds Standard SKU max of 256 KB
+                too_large = "A" * 1024 * 256
 
             async with sb_client.get_queue_sender(servicebus_queue.name) as sender:
                 with pytest.raises(MessageSizeExceededError):
                     await sender.send_messages(ServiceBusMessage(too_large))
 
-                half_too_large = "A" * int((1024 * 256) / 2)
+                if is_premium:
+                    # ~51 MB each, total exceeds 100 MB limit
+                    half_too_large = "A" * (51 * 1024 * 1024)
+                else:
+                    half_too_large = "A" * int((1024 * 256) / 2)
                 with pytest.raises(MessageSizeExceededError):
                     await sender.send_messages([ServiceBusMessage(half_too_large), ServiceBusMessage(half_too_large)])
 
