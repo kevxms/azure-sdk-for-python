@@ -20,6 +20,11 @@ from devtools_testutils import (
 )
 from devtools_testutils.resource_testcase import RESOURCE_GROUP_PARAM
 
+from servicebus_direct_rest_client import (
+    use_direct_rest_client,
+    get_direct_rest_client,
+)
+
 SERVICEBUS_DEFAULT_AUTH_RULE_NAME = "RootManageSharedAccessKey"
 SERVICEBUS_NAMESPACE_PARAM = "servicebus_namespace"
 SERVICEBUS_TOPIC_PARAM = "servicebus_topic"
@@ -31,6 +36,11 @@ SERVICEBUS_ENDPOINT_SUFFIX = os.environ.get("SERVICEBUS_ENDPOINT_SUFFIX", ".serv
 BASE_URL = os.environ.get("SERVICEBUS_RESOURCE_MANAGER_URL", "https://management.azure.com/")
 CREDENTIAL_SCOPES = [f"{BASE_URL}.default"]
 LOCATION = get_region_override("westus")
+
+
+# =============================================================================
+# Resource Preparers
+# =============================================================================
 
 
 class ServiceBusResourceGroupPreparer(AzureMgmtPreparer):
@@ -334,22 +344,29 @@ class ServiceBusTopicPreparer(_ServiceBusChildResourcePreparer):
 
     def create_resource(self, name, **kwargs):
         if self.is_live:
-            self.client = self.create_mgmt_client(
-                ServiceBusManagementClient, base_url=BASE_URL, credential_scopes=CREDENTIAL_SCOPES
-            )
-            group = self._get_resource_group(**kwargs)
             namespace = self._get_namespace(**kwargs)
-            retries = 4
-            for i in range(retries):
-                try:
-                    self.resource = self.client.topics.create_or_update(group.name, namespace.name, name, {})
-                    break
-                except Exception as ex:
-                    error = "The requested resource {} does not exist".format(namespace)
-                    not_found_error = "Operation returned an invalid status code 'Not Found'"
-                    if (error not in str(ex) and not_found_error not in str(ex)) or i == retries - 1:
-                        raise
-                    time.sleep(3)
+            
+            # Use direct REST client if configured
+            if use_direct_rest_client():
+                rest_client = get_direct_rest_client()
+                rest_client.create_topic(namespace.name, name)
+                self.resource = FakeResource(name=name, id=name)
+            else:
+                self.client = self.create_mgmt_client(
+                    ServiceBusManagementClient, base_url=BASE_URL, credential_scopes=CREDENTIAL_SCOPES
+                )
+                group = self._get_resource_group(**kwargs)
+                retries = 4
+                for i in range(retries):
+                    try:
+                        self.resource = self.client.topics.create_or_update(group.name, namespace.name, name, {})
+                        break
+                    except Exception as ex:
+                        error = "The requested resource {} does not exist".format(namespace)
+                        not_found_error = "Operation returned an invalid status code 'Not Found'"
+                        if (error not in str(ex) and not_found_error not in str(ex)) or i == retries - 1:
+                            raise
+                        time.sleep(3)
 
         else:
             self.resource = FakeResource(name=name, id=name)
@@ -359,9 +376,15 @@ class ServiceBusTopicPreparer(_ServiceBusChildResourcePreparer):
 
     def remove_resource(self, name, **kwargs):
         if self.is_live:
-            group = self._get_resource_group(**kwargs)
             namespace = self._get_namespace(**kwargs)
-            self.client.topics.delete(group.name, namespace.name, name)
+            
+            # Use direct REST client if configured
+            if use_direct_rest_client():
+                rest_client = get_direct_rest_client()
+                rest_client.delete_topic(namespace.name, name)
+            else:
+                group = self._get_resource_group(**kwargs)
+                self.client.topics.delete(group.name, namespace.name, name)
 
 
 class ServiceBusSubscriptionPreparer(_ServiceBusChildResourcePreparer):
@@ -401,32 +424,45 @@ class ServiceBusSubscriptionPreparer(_ServiceBusChildResourcePreparer):
 
     def create_resource(self, name, **kwargs):
         if self.is_live:
-            self.client = self.create_mgmt_client(
-                ServiceBusManagementClient, base_url=BASE_URL, credential_scopes=CREDENTIAL_SCOPES
-            )
-            group = self._get_resource_group(**kwargs)
             namespace = self._get_namespace(**kwargs)
             topic = self._get_topic(**kwargs)
-            retries = 4
-            for i in range(retries):
-                try:
-                    self.resource = self.client.subscriptions.create_or_update(
-                        group.name,
-                        namespace.name,
-                        topic.name,
-                        name,
-                        SBSubscription(
-                            requires_session=self.requires_session,
-                            lock_duration=self.lock_duration,
-                        ),
-                    )
-                    break
-                except Exception as ex:
-                    error = "The requested resource {} does not exist".format(namespace)
-                    not_found_error = "Operation returned an invalid status code 'Not Found'"
-                    if (error not in str(ex) and not_found_error not in str(ex)) or i == retries - 1:
-                        raise
-                    time.sleep(3)
+            
+            # Use direct REST client if configured
+            if use_direct_rest_client():
+                rest_client = get_direct_rest_client()
+                rest_client.create_subscription(
+                    namespace.name,
+                    topic.name,
+                    name,
+                    requires_session=self.requires_session,
+                    lock_duration=self.lock_duration,
+                )
+                self.resource = FakeResource(name=name, id=name)
+            else:
+                self.client = self.create_mgmt_client(
+                    ServiceBusManagementClient, base_url=BASE_URL, credential_scopes=CREDENTIAL_SCOPES
+                )
+                group = self._get_resource_group(**kwargs)
+                retries = 4
+                for i in range(retries):
+                    try:
+                        self.resource = self.client.subscriptions.create_or_update(
+                            group.name,
+                            namespace.name,
+                            topic.name,
+                            name,
+                            SBSubscription(
+                                requires_session=self.requires_session,
+                                lock_duration=self.lock_duration,
+                            ),
+                        )
+                        break
+                    except Exception as ex:
+                        error = "The requested resource {} does not exist".format(namespace)
+                        not_found_error = "Operation returned an invalid status code 'Not Found'"
+                        if (error not in str(ex) and not_found_error not in str(ex)) or i == retries - 1:
+                            raise
+                        time.sleep(3)
 
         else:
             self.resource = FakeResource(name=name, id=name)
@@ -436,10 +472,16 @@ class ServiceBusSubscriptionPreparer(_ServiceBusChildResourcePreparer):
 
     def remove_resource(self, name, **kwargs):
         if self.is_live:
-            group = self._get_resource_group(**kwargs)
             namespace = self._get_namespace(**kwargs)
             topic = self._get_topic(**kwargs)
-            self.client.subscriptions.delete(group.name, namespace.name, topic.name, name)
+            
+            # Use direct REST client if configured
+            if use_direct_rest_client():
+                rest_client = get_direct_rest_client()
+                rest_client.delete_subscription(namespace.name, topic.name, name)
+            else:
+                group = self._get_resource_group(**kwargs)
+                self.client.subscriptions.delete(group.name, namespace.name, topic.name, name)
 
     def _get_topic(self, **kwargs):
         try:
@@ -500,33 +542,48 @@ class ServiceBusQueuePreparer(_ServiceBusChildResourcePreparer):
 
     def create_resource(self, name, **kwargs):
         if self.is_live:
-            self.client = self.create_mgmt_client(
-                ServiceBusManagementClient, base_url=BASE_URL, credential_scopes=CREDENTIAL_SCOPES
-            )
-            group = self._get_resource_group(**kwargs)
             namespace = self._get_namespace(**kwargs)
-            retries = 4
-            for i in range(retries):
-                try:
-                    self.resource = self.client.queues.create_or_update(
-                        group.name,
-                        namespace.name,
-                        name,
-                        SBQueue(
-                            lock_duration=self.lock_duration,
-                            requires_duplicate_detection=self.requires_duplicate_detection,
-                            dead_lettering_on_message_expiration=self.dead_lettering_on_message_expiration,
-                            requires_session=self.requires_session,
-                            enable_partitioning=self.enable_partitioning,
-                        ),
-                    )
-                    break
-                except Exception as ex:
-                    error = "The requested resource {} does not exist".format(namespace)
-                    not_found_error = "Operation returned an invalid status code 'Not Found'"
-                    if (error not in str(ex) and not_found_error not in str(ex)) or i == retries - 1:
-                        raise
-                    time.sleep(3)
+            
+            # Use direct REST client if configured
+            if use_direct_rest_client():
+                rest_client = get_direct_rest_client()
+                rest_client.create_queue(
+                    namespace.name,
+                    name,
+                    lock_duration=self.lock_duration,
+                    requires_duplicate_detection=self.requires_duplicate_detection,
+                    dead_lettering_on_message_expiration=self.dead_lettering_on_message_expiration,
+                    requires_session=self.requires_session,
+                    enable_partitioning=self.enable_partitioning,
+                )
+                self.resource = FakeResource(name=name, id=name)
+            else:
+                self.client = self.create_mgmt_client(
+                    ServiceBusManagementClient, base_url=BASE_URL, credential_scopes=CREDENTIAL_SCOPES
+                )
+                group = self._get_resource_group(**kwargs)
+                retries = 4
+                for i in range(retries):
+                    try:
+                        self.resource = self.client.queues.create_or_update(
+                            group.name,
+                            namespace.name,
+                            name,
+                            SBQueue(
+                                lock_duration=self.lock_duration,
+                                requires_duplicate_detection=self.requires_duplicate_detection,
+                                dead_lettering_on_message_expiration=self.dead_lettering_on_message_expiration,
+                                requires_session=self.requires_session,
+                                enable_partitioning=self.enable_partitioning,
+                            ),
+                        )
+                        break
+                    except Exception as ex:
+                        error = "The requested resource {} does not exist".format(namespace)
+                        not_found_error = "Operation returned an invalid status code 'Not Found'"
+                        if (error not in str(ex) and not_found_error not in str(ex)) or i == retries - 1:
+                            raise
+                        time.sleep(3)
 
         else:
             self.resource = FakeResource(name=name, id=name)
@@ -536,9 +593,15 @@ class ServiceBusQueuePreparer(_ServiceBusChildResourcePreparer):
 
     def remove_resource(self, name, **kwargs):
         if self.is_live:
-            group = self._get_resource_group(**kwargs)
             namespace = self._get_namespace(**kwargs)
-            self.client.queues.delete(group.name, namespace.name, name)
+            
+            # Use direct REST client if configured
+            if use_direct_rest_client():
+                rest_client = get_direct_rest_client()
+                rest_client.delete_queue(namespace.name, name)
+            else:
+                group = self._get_resource_group(**kwargs)
+                self.client.queues.delete(group.name, namespace.name, name)
 
 
 class ServiceBusNamespaceAuthorizationRulePreparer(_ServiceBusChildResourcePreparer):
