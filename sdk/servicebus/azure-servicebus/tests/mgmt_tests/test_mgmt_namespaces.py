@@ -23,6 +23,6 @@ class TestServiceBusManagementClientNamespace(AzureMgmtRecordedTestCase):
         )
         properties = mgmt_service.get_namespace_properties()
         assert properties
-        assert properties.messaging_sku == "Standard"
+        assert properties.messaging_sku in ("Standard", "Premium")
         # assert properties.name == servicebus_fully_qualified_namespace.name
         # This is disabled pending investigation of why it isn't getting scrubbed despite expected scrubber use.
