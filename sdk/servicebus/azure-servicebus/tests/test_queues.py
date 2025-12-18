@@ -30,7 +30,6 @@ from azure.servicebus._pyamqp import error, client, management_operation
 from azure.servicebus._pyamqp._decode import decode_payload
 from azure.servicebus import (
     ServiceBusClient,
-    ServiceBusAdministrationClient,
     AutoLockRenewer,
     TransportType,
     ServiceBusMessage,
@@ -40,6 +39,7 @@ from azure.servicebus import (
     ServiceBusSubQueue,
     ServiceBusMessageState,
 )
+from azure.servicebus.management import ServiceBusAdministrationClient
 from azure.servicebus.amqp import (
     AmqpMessageHeader,
     AmqpMessageBodyType,
