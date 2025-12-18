@@ -11,22 +11,48 @@ Usage:
       Example: "swedencentral02.int.messaging.azure-int.net:44400"
     - SERVICEBUS_RP_CERT_KEYVAULT_URI: Key Vault certificate URI
       Example: "https://myvault.vault.azure.net/certificates/MyCert"
+    
+    Also requires (already used by other test infrastructure):
+    - AZURE_SUBSCRIPTION_ID: Azure subscription ID
+    - SERVICEBUS_RESOURCE_GROUP: Resource group name
 """
 
+import atexit
 import os
 import json
 import base64
-import ssl
 import tempfile
 import logging
+import urllib3
 from typing import Optional
-from urllib.request import Request, urlopen
-from urllib.error import HTTPError
+
+import requests
+
+# Suppress InsecureRequestWarning for internal endpoints
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
 # Environment variable configuration
 SERVICEBUS_RP_HOST = os.environ.get("SERVICEBUS_RP_HOST", None)
 SERVICEBUS_RP_CERT_KEYVAULT_URI = os.environ.get("SERVICEBUS_RP_CERT_KEYVAULT_URI", None)
+# Reuse existing env vars for subscription and resource group
+AZURE_SUBSCRIPTION_ID = os.environ.get("AZURE_SUBSCRIPTION_ID", None)
+SERVICEBUS_RESOURCE_GROUP = os.environ.get("SERVICEBUS_RESOURCE_GROUP", None)
+
+# Module-level temp file tracking for cleanup
+_temp_files_to_cleanup = []
+
+
+def _cleanup_temp_files():
+    """Clean up any temporary certificate files at exit."""
+    for path in _temp_files_to_cleanup:
+        try:
+            os.unlink(path)
+        except Exception:
+            pass
+
+
+atexit.register(_cleanup_temp_files)
 
 
 def _get_keyvault_certificate_as_pfx(cert_url: str) -> bytes:
@@ -77,9 +103,13 @@ def _get_keyvault_certificate_as_pfx(cert_url: str) -> bytes:
     return pfx_bytes
 
 
-def _create_ssl_context_from_pfx(pfx_bytes: bytes, password: Optional[str] = None) -> ssl.SSLContext:
+def _create_cert_files_from_pfx(pfx_bytes: bytes, password: Optional[str] = None) -> tuple:
     """
-    Create an SSL context from PFX bytes using the cryptography library.
+    Extract certificate and key from PFX bytes and write to temporary PEM files.
+    
+    Returns:
+        Tuple of (cert_file_path, key_file_path) for use with requests library.
+        Files are registered for cleanup at process exit.
     """
     from cryptography.hazmat.primitives.serialization import pkcs12, Encoding, PrivateFormat, NoEncryption
     from cryptography.hazmat.backends import default_backend
@@ -95,77 +125,85 @@ def _create_ssl_context_from_pfx(pfx_bytes: bytes, password: Optional[str] = Non
     cert_pem = certificate.public_bytes(Encoding.PEM)
     key_pem = private_key.private_bytes(Encoding.PEM, PrivateFormat.TraditionalOpenSSL, NoEncryption())
     
-    # Write to temporary files (SSL context needs file paths)
+    # Write to temporary files - these must persist for the lifetime of the process
     cert_file = tempfile.NamedTemporaryFile(mode='wb', suffix='.pem', delete=False)
     key_file = tempfile.NamedTemporaryFile(mode='wb', suffix='.pem', delete=False)
     
-    try:
-        cert_file.write(cert_pem)
-        cert_file.close()
-        
-        key_file.write(key_pem)
-        key_file.close()
-        
-        context = ssl.create_default_context()
-        context.load_cert_chain(certfile=cert_file.name, keyfile=key_file.name)
-        
-        # For internal endpoints, may need to disable hostname verification
-        # Uncomment these lines if certificate validation fails:
-        # context.check_hostname = False
-        # context.verify_mode = ssl.CERT_NONE
-        
-        return context
-    finally:
-        # Clean up temp files
-        try:
-            os.unlink(cert_file.name)
-            os.unlink(key_file.name)
-        except Exception:
-            pass
+    cert_file.write(cert_pem)
+    cert_file.close()
+    
+    key_file.write(key_pem)
+    key_file.close()
+    
+    # Register for cleanup at exit
+    _temp_files_to_cleanup.append(cert_file.name)
+    _temp_files_to_cleanup.append(key_file.name)
+    
+    return cert_file.name, key_file.name
 
 
 class ServiceBusDirectRestClient:
     """Direct REST client for Service Bus management operations using certificate auth from Key Vault."""
     
-    def __init__(self, rp_host: str, keyvault_cert_uri: str):
+    DEFAULT_API_VERSION = "2017-04-01"
+    
+    def __init__(self, rp_host: str, keyvault_cert_uri: str, subscription_id: str, resource_group: str):
         # rp_host is hostname:port without scheme, e.g. "swedencentral02.int.messaging.azure-int.net:44400"
         self.base_url = f"https://{rp_host}".rstrip("/")
-        self._ssl_context = None
+        self._cert_tuple = None  # (cert_file_path, key_file_path)
         self._keyvault_cert_uri = keyvault_cert_uri
+        self._session = requests.Session()
+        self.subscription_id = subscription_id
+        self.resource_group = resource_group
     
-    def _get_ssl_context(self):
-        """Lazy-load SSL context with certificate from Key Vault."""
-        if self._ssl_context is None:
+    def _get_cert_tuple(self):
+        """Lazy-load certificate files from Key Vault."""
+        if self._cert_tuple is None:
             logging.info(f"Fetching certificate from Key Vault: {self._keyvault_cert_uri}")
             pfx_bytes = _get_keyvault_certificate_as_pfx(self._keyvault_cert_uri)
-            self._ssl_context = _create_ssl_context_from_pfx(pfx_bytes)
-            logging.info("Certificate loaded successfully")
-        return self._ssl_context
+            self._cert_tuple = _create_cert_files_from_pfx(pfx_bytes)
+            logging.info(f"Certificate loaded successfully: {self._cert_tuple}")
+        return self._cert_tuple
     
-    def _request(self, method: str, path: str, body: Optional[dict] = None) -> dict:
+    def _build_namespace_path(self, namespace: str) -> str:
+        """Build the ARM-style path prefix for a namespace."""
+        return f"/subscriptions/{self.subscription_id}/resourcegroups/{self.resource_group}/providers/Microsoft.ServiceBus/namespaces/{namespace}"
+    
+    def _request(self, method: str, path: str, body: Optional[dict] = None, api_version: str = None) -> dict:
         """Make an HTTP request with certificate authentication."""
-        url = f"{self.base_url}{path}"
+        if api_version is None:
+            api_version = self.DEFAULT_API_VERSION
+        
+        # Add api-version query parameter
+        separator = "&" if "?" in path else "?"
+        url = f"{self.base_url}{path}{separator}api-version={api_version}"
+        
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json",
         }
         
-        data = json.dumps(body).encode("utf-8") if body else None
-        req = Request(url, data=data, headers=headers, method=method)
+        cert_tuple = self._get_cert_tuple()
         
-        logging.debug(f"Direct REST {method} {url}")
+        logging.info(f"Direct REST {method} {url}")
         
-        try:
-            with urlopen(req, context=self._get_ssl_context()) as response:
-                if response.status in (200, 201, 202, 204):
-                    content_length = response.headers.get("Content-Length", "0")
-                    if content_length != "0":
-                        return json.loads(response.read().decode("utf-8"))
-                    return {}
-                raise Exception(f"Unexpected status {response.status}")
-        except HTTPError as e:
-            error_body = e.read().decode("utf-8") if e.fp else ""
-            raise Exception(f"HTTP {e.code}: {e.reason} - {error_body}")
+        response = self._session.request(
+            method=method,
+            url=url,
+            headers=headers,
+            json=body if body else None,
+            cert=cert_tuple,
+            verify=False,
+        )
+        
+        logging.info(f"Direct REST response: {response.status_code}")
+        
+        if response.status_code in (200, 201, 202, 204):
+            if response.text:
+                return response.json()
+            return {}
+        
+        response.raise_for_status()
     
     # Queue operations
     def create_queue(
@@ -177,29 +215,32 @@ class ServiceBusDirectRestClient:
         dead_lettering_on_message_expiration: bool = False,
         requires_session: bool = False,
         enable_partitioning: bool = False,
+        api_version: str = None,
     ) -> dict:
-        path = f"/{namespace}/queues/{queue_name}"
+        path = f"{self._build_namespace_path(namespace)}/queues/{queue_name}"
         properties = {
-            "lockDuration": lock_duration,
-            "requiresDuplicateDetection": requires_duplicate_detection,
-            "deadLetteringOnMessageExpiration": dead_lettering_on_message_expiration,
-            "requiresSession": requires_session,
-            "enablePartitioning": enable_partitioning,
+            "properties": {
+                "lockDuration": lock_duration,
+                "requiresDuplicateDetection": requires_duplicate_detection,
+                "deadLetteringOnMessageExpiration": dead_lettering_on_message_expiration,
+                "requiresSession": requires_session,
+                "enablePartitioning": enable_partitioning,
+            }
         }
-        return self._request("PUT", path, properties)
+        return self._request("PUT", path, properties, api_version=api_version)
     
-    def delete_queue(self, namespace: str, queue_name: str):
-        path = f"/{namespace}/queues/{queue_name}"
-        return self._request("DELETE", path)
+    def delete_queue(self, namespace: str, queue_name: str, api_version: str = None):
+        path = f"{self._build_namespace_path(namespace)}/queues/{queue_name}"
+        return self._request("DELETE", path, api_version=api_version)
     
     # Topic operations
-    def create_topic(self, namespace: str, topic_name: str) -> dict:
-        path = f"/{namespace}/topics/{topic_name}"
-        return self._request("PUT", path, {})
+    def create_topic(self, namespace: str, topic_name: str, api_version: str = None) -> dict:
+        path = f"{self._build_namespace_path(namespace)}/topics/{topic_name}"
+        return self._request("PUT", path, {"properties": {}}, api_version=api_version)
     
-    def delete_topic(self, namespace: str, topic_name: str):
-        path = f"/{namespace}/topics/{topic_name}"
-        return self._request("DELETE", path)
+    def delete_topic(self, namespace: str, topic_name: str, api_version: str = None):
+        path = f"{self._build_namespace_path(namespace)}/topics/{topic_name}"
+        return self._request("DELETE", path, api_version=api_version)
     
     # Subscription operations
     def create_subscription(
@@ -209,17 +250,20 @@ class ServiceBusDirectRestClient:
         sub_name: str,
         requires_session: bool = False,
         lock_duration: str = "PT60S",
+        api_version: str = None,
     ) -> dict:
-        path = f"/{namespace}/topics/{topic_name}/subscriptions/{sub_name}"
+        path = f"{self._build_namespace_path(namespace)}/topics/{topic_name}/subscriptions/{sub_name}"
         properties = {
-            "requiresSession": requires_session,
-            "lockDuration": lock_duration,
+            "properties": {
+                "requiresSession": requires_session,
+                "lockDuration": lock_duration,
+            }
         }
-        return self._request("PUT", path, properties)
+        return self._request("PUT", path, properties, api_version=api_version)
     
-    def delete_subscription(self, namespace: str, topic_name: str, sub_name: str):
-        path = f"/{namespace}/topics/{topic_name}/subscriptions/{sub_name}"
-        return self._request("DELETE", path)
+    def delete_subscription(self, namespace: str, topic_name: str, sub_name: str, api_version: str = None):
+        path = f"{self._build_namespace_path(namespace)}/topics/{topic_name}/subscriptions/{sub_name}"
+        return self._request("DELETE", path, api_version=api_version)
 
 
 # Singleton client instance
@@ -228,7 +272,12 @@ _direct_rest_client = None
 
 def use_direct_rest_client() -> bool:
     """Check if direct REST client should be used instead of ARM."""
-    return bool(SERVICEBUS_RP_HOST and SERVICEBUS_RP_CERT_KEYVAULT_URI)
+    return bool(
+        SERVICEBUS_RP_HOST 
+        and SERVICEBUS_RP_CERT_KEYVAULT_URI
+        and AZURE_SUBSCRIPTION_ID
+        and SERVICEBUS_RESOURCE_GROUP
+    )
 
 
 def get_direct_rest_client() -> ServiceBusDirectRestClient:
@@ -237,6 +286,8 @@ def get_direct_rest_client() -> ServiceBusDirectRestClient:
     if _direct_rest_client is None:
         _direct_rest_client = ServiceBusDirectRestClient(
             rp_host=SERVICEBUS_RP_HOST,
-            keyvault_cert_uri=SERVICEBUS_RP_CERT_KEYVAULT_URI
+            keyvault_cert_uri=SERVICEBUS_RP_CERT_KEYVAULT_URI,
+            subscription_id=AZURE_SUBSCRIPTION_ID,
+            resource_group=SERVICEBUS_RESOURCE_GROUP,
         )
     return _direct_rest_client

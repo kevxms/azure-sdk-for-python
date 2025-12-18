@@ -12,6 +12,21 @@ $SharedAccessKey = "SHARED-ACCESS-KEY"
 $DomainName = "servicebus.windows.net"
 
 # ============================================
+# Optional: Resource Manager URL and Region
+# ============================================
+$env:SERVICEBUS_RESOURCE_MANAGER_URL = "https://management.azure.com/"
+$env:RESOURCE_REGION = "southcentralus"
+
+# ============================================
+# Direct REST Client (bypasses ARM)
+# Set these to use direct RP endpoint instead of ARM
+# e.g. $env:SERVICEBUS_RP_HOST = "swedencentral02.int.messaging.azure-int.net:44400"
+# e.g. $env:SERVICEBUS_RP_CERT_KEYVAULT_URI = "https://servicebustestkeyvault.vault.azure.net/certificates/AcisClientAuthCertForInt"
+# ============================================
+$env:SERVICEBUS_RP_HOST = $null
+$env:SERVICEBUS_RP_CERT_KEYVAULT_URI = $null
+
+# ============================================
 # Test Mode
 # ============================================
 # Set to "true" to run live tests against actual Azure resources
@@ -51,12 +66,6 @@ $env:SERVICEBUS_RESOURCE_GROUP = $ResourceGroup
 $env:SERVICEBUS_CONNECTION_STR = "Endpoint=sb://$NamespaceName.$DomainName/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=$SharedAccessKey"
 $env:SERVICEBUS_FULLY_QUALIFIED_NAMESPACE = "$NamespaceName.$DomainName"
 $env:SERVICEBUS_ENDPOINT_SUFFIX = ".$DomainName"
-
-# ============================================
-# Optional: Resource Manager URL and Region
-# ============================================
-$env:SERVICEBUS_RESOURCE_MANAGER_URL = "https://management.azure.com/"
-$env:RESOURCE_REGION = "southcentralus"
 
 # ============================================
 # Note: Queue, Topic, and Subscription entities
