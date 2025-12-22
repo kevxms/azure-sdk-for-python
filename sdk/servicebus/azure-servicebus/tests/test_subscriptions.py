@@ -17,7 +17,7 @@ from azure.servicebus._base_handler import ServiceBusSharedKeyCredential
 from azure.servicebus.exceptions import ServiceBusError, MessageLockLostError
 from azure.servicebus._common.constants import ServiceBusSubQueue
 
-from devtools_testutils import AzureMgmtRecordedTestCase, RandomNameResourceGroupPreparer, get_credential
+from devtools_testutils import AzureMgmtRecordedTestCase, RandomNameResourceGroupPreparer
 from servicebus_preparer import (
     CachedServiceBusNamespacePreparer,
     CachedServiceBusTopicPreparer,
@@ -27,7 +27,7 @@ from servicebus_preparer import (
     CachedServiceBusResourceGroupPreparer,
     SERVICEBUS_ENDPOINT_SUFFIX,
 )
-from utilities import get_logger, print_message, uamqp_transport as get_uamqp_transport, ArgPasser
+from utilities import get_logger, print_message, uamqp_transport as get_uamqp_transport, ArgPasser, get_credential_aad_or_sas
 
 uamqp_transport_params, uamqp_transport_ids = get_uamqp_transport()
 
@@ -52,10 +52,12 @@ class TestServiceBusSubscription(AzureMgmtRecordedTestCase):
         servicebus_namespace=None,
         servicebus_topic=None,
         servicebus_subscription=None,
+        servicebus_namespace_key_name=None,
+        servicebus_namespace_primary_key=None,
         **kwargs,
     ):
         fully_qualified_namespace = f"{servicebus_namespace.name}{SERVICEBUS_ENDPOINT_SUFFIX}"
-        credential = get_credential()
+        credential = get_credential_aad_or_sas(key_name=servicebus_namespace_key_name, key=servicebus_namespace_primary_key)
         with ServiceBusClient(
             fully_qualified_namespace=fully_qualified_namespace,
             credential=credential,
@@ -176,11 +178,13 @@ class TestServiceBusSubscription(AzureMgmtRecordedTestCase):
         servicebus_namespace=None,
         servicebus_topic=None,
         servicebus_subscription=None,
+        servicebus_namespace_key_name=None,
+        servicebus_namespace_primary_key=None,
         **kwargs,
     ):
 
         fully_qualified_namespace = f"{servicebus_namespace.name}{SERVICEBUS_ENDPOINT_SUFFIX}"
-        credential = get_credential()
+        credential = get_credential_aad_or_sas(key_name=servicebus_namespace_key_name, key=servicebus_namespace_primary_key)
         with ServiceBusClient(
             fully_qualified_namespace=fully_qualified_namespace,
             credential=credential,

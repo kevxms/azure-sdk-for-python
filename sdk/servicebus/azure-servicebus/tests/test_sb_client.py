@@ -40,7 +40,7 @@ from azure.servicebus.exceptions import (
     ServiceBusAuthorizationError,
     ServiceBusConnectionError,
 )
-from devtools_testutils import AzureMgmtRecordedTestCase, get_credential
+from devtools_testutils import AzureMgmtRecordedTestCase
 from servicebus_preparer import (
     CachedServiceBusNamespacePreparer,
     ServiceBusTopicPreparer,
@@ -58,6 +58,7 @@ from utilities import (
     ArgPasser,
     socket_transport as get_socket_transport,
     SocketArgPasser,
+    get_credential_aad_or_sas,
 )
 
 uamqp_transport_params, uamqp_transport_ids = get_uamqp_transport()
@@ -109,10 +110,10 @@ class TestServiceBusClient(AzureMgmtRecordedTestCase):
     @pytest.mark.parametrize("uamqp_transport", uamqp_transport_params, ids=uamqp_transport_ids)
     @ArgPasser()
     def test_sb_client_bad_entity(
-        self, uamqp_transport, *, servicebus_namespace_connection_string=None, servicebus_namespace=None, **kwargs
+        self, uamqp_transport, *, servicebus_namespace_connection_string=None, servicebus_namespace=None, servicebus_namespace_key_name=None, servicebus_namespace_primary_key=None, **kwargs
     ):
         fully_qualified_namespace = f"{servicebus_namespace.name}{SERVICEBUS_ENDPOINT_SUFFIX}"
-        credential = get_credential()
+        credential = get_credential_aad_or_sas(key_name=servicebus_namespace_key_name, key=servicebus_namespace_primary_key)
         client = ServiceBusClient(fully_qualified_namespace, credential, uamqp_transport=uamqp_transport)
 
         with client:
@@ -292,10 +293,12 @@ class TestServiceBusClient(AzureMgmtRecordedTestCase):
         servicebus_queue=None,
         servicebus_topic=None,
         servicebus_subscription=None,
+        servicebus_namespace_key_name=None,
+        servicebus_namespace_primary_key=None,
         **kwargs,
     ):
         fully_qualified_namespace = f"{servicebus_namespace.name}{SERVICEBUS_ENDPOINT_SUFFIX}"
-        credential = get_credential()
+        credential = get_credential_aad_or_sas(key_name=servicebus_namespace_key_name, key=servicebus_namespace_primary_key)
         client = ServiceBusClient(
             fully_qualified_namespace=fully_qualified_namespace, credential=credential, uamqp_transport=uamqp_transport
         )
@@ -590,10 +593,12 @@ class TestServiceBusClient(AzureMgmtRecordedTestCase):
         *,
         servicebus_namespace=None,
         servicebus_queue=None,
+        servicebus_namespace_key_name=None,
+        servicebus_namespace_primary_key=None,
         **kwargs,
     ):
         fully_qualified_namespace = f"{servicebus_namespace.name}{SERVICEBUS_ENDPOINT_SUFFIX}"
-        credential = get_credential()
+        credential = get_credential_aad_or_sas(key_name=servicebus_namespace_key_name, key=servicebus_namespace_primary_key)
 
         # Check that SSLContext with invalid/nonexistent cert file raises an error
         context = ssl.SSLContext(cafile="fakecert.pem")

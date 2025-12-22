@@ -25,6 +25,8 @@ $env:RESOURCE_REGION = "southcentralus"
 # ============================================
 $env:SERVICEBUS_RP_HOST = $null
 $env:SERVICEBUS_RP_CERT_KEYVAULT_URI = $null
+Remove-Item Env:SERVICEBUS_RP_HOST -ErrorAction SilentlyContinue
+Remove-Item Env:SERVICEBUS_RP_CERT_KEYVAULT_URI -ErrorAction SilentlyContinue
 
 # ============================================
 # Test Mode

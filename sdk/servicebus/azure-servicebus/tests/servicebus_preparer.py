@@ -34,7 +34,9 @@ SERVICEBUS_AUTHORIZATION_RULE_PARAM = "servicebus_authorization_rule"
 SERVICEBUS_QUEUE_AUTHORIZATION_RULE_PARAM = "servicebus_queue_authorization_rule"
 SERVICEBUS_ENDPOINT_SUFFIX = os.environ.get("SERVICEBUS_ENDPOINT_SUFFIX", ".servicebus.windows.net")
 BASE_URL = os.environ.get("SERVICEBUS_RESOURCE_MANAGER_URL", "https://management.azure.com/")
-CREDENTIAL_SCOPES = [f"{BASE_URL}.default"]
+# Credential scope for ARM - INT/dogfood uses standard Azure management audience
+CREDENTIAL_SCOPE_URL = os.environ.get("SERVICEBUS_RESOURCE_MANAGER_CREDENTIAL_SCOPE", "https://management.azure.com/")
+CREDENTIAL_SCOPES = [f"{CREDENTIAL_SCOPE_URL}.default"]
 LOCATION = get_region_override("westus")
 
 

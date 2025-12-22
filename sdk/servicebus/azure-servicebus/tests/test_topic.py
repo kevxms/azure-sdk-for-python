@@ -10,7 +10,7 @@ import time
 import json
 import sys
 
-from devtools_testutils import AzureMgmtRecordedTestCase, RandomNameResourceGroupPreparer, get_credential
+from devtools_testutils import AzureMgmtRecordedTestCase, RandomNameResourceGroupPreparer
 
 from azure.servicebus import ServiceBusClient
 from azure.servicebus._base_handler import ServiceBusSharedKeyCredential
@@ -23,7 +23,7 @@ from servicebus_preparer import (
     CachedServiceBusResourceGroupPreparer,
     SERVICEBUS_ENDPOINT_SUFFIX,
 )
-from utilities import get_logger, uamqp_transport as get_uamqp_transport, ArgPasser
+from utilities import get_logger, uamqp_transport as get_uamqp_transport, ArgPasser, get_credential_aad_or_sas
 
 uamqp_transport_params, uamqp_transport_ids = get_uamqp_transport()
 
@@ -40,10 +40,10 @@ class TestServiceBusTopics(AzureMgmtRecordedTestCase):
     @pytest.mark.parametrize("uamqp_transport", uamqp_transport_params, ids=uamqp_transport_ids)
     @ArgPasser()
     def test_topic_by_servicebus_client_send_basic(
-        self, uamqp_transport, *, servicebus_namespace=None, servicebus_topic=None, **kwargs
+        self, uamqp_transport, *, servicebus_namespace=None, servicebus_namespace_key_name=None, servicebus_namespace_primary_key=None, servicebus_topic=None, **kwargs
     ):
         fully_qualified_namespace = f"{servicebus_namespace.name}{SERVICEBUS_ENDPOINT_SUFFIX}"
-        credential = get_credential()
+        credential = get_credential_aad_or_sas(key_name=servicebus_namespace_key_name, key=servicebus_namespace_primary_key)
         with ServiceBusClient(
             fully_qualified_namespace=fully_qualified_namespace,
             credential=credential,
@@ -122,9 +122,9 @@ class TestServiceBusTopics(AzureMgmtRecordedTestCase):
     @CachedServiceBusTopicPreparer(name_prefix='servicebustest')
     @pytest.mark.parametrize("uamqp_transport", uamqp_transport_params, ids=uamqp_transport_ids)
     @ArgPasser()
-    def test_topic_by_servicebus_client_send_large_messages_w_sleep(self, uamqp_transport, *, servicebus_namespace=None, servicebus_topic=None, **kwargs):
+    def test_topic_by_servicebus_client_send_large_messages_w_sleep(self, uamqp_transport, *, servicebus_namespace=None, servicebus_namespace_key_name=None, servicebus_namespace_primary_key=None, servicebus_topic=None, **kwargs):
         fully_qualified_namespace = f"{servicebus_namespace.name}{SERVICEBUS_ENDPOINT_SUFFIX}"
-        credential = get_credential()
+        credential = get_credential_aad_or_sas(key_name=servicebus_namespace_key_name, key=servicebus_namespace_primary_key)
         
         # message of 100 kb - requires multiple transfer frames
         size = 100

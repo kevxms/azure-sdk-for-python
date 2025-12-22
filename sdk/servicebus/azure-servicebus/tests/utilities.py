@@ -9,6 +9,9 @@ import sys
 import time
 import os
 
+from devtools_testutils import get_credential
+from azure.servicebus._base_handler import ServiceBusSharedKeyCredential
+
 try:
     import uamqp
 
@@ -114,3 +117,17 @@ class SocketArgPasserAsync:
             await fn(test_class, uamqp_transport=uamqp_transport, socket_transport=socket_transport, **kwargs)
 
         return _preparer
+
+
+def get_credential_aad_or_sas(key_name=None, key=None, is_async=False, use_sas=None):
+    if use_sas is None:
+        use_sas = os.environ.get("OVERRIDE_AUTH_AAD_TO_SAS", "false").lower() == "true"
+
+    if use_sas:
+        if not key_name or not key:
+            raise ValueError("use_sas is True but key_name or key is not provided")
+
+        logging.info("Using ServiceBusSharedKeyCredential (SAS auth)")
+        return ServiceBusSharedKeyCredential(policy=key_name, key=key)
+
+    return get_credential(is_async=is_async)
