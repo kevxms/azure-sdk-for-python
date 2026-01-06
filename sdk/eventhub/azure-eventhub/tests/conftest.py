@@ -11,6 +11,10 @@ from devtools_testutils import (
     get_region_override,
     get_credential as get_devtools_credential,
 )
+from eventhub_direct_rest_client import (
+    use_direct_rest_client,
+    get_direct_rest_client,
+)
 from azure.eventhub.extensions.checkpointstoreblobaio import (
     BlobCheckpointStore as BlobCheckpointStoreAsync,
 )
@@ -319,47 +323,75 @@ def live_eventhub(
         warnings.warn(UserWarning("AZURE_SUBSCRIPTION_ID undefined - skipping test"))
         pytest.skip("AZURE_SUBSCRIPTION_ID defined")
 
-    base_url = os.environ.get(
-        "EVENTHUB_RESOURCE_MANAGER_URL", "https://management.azure.com/"
-    )
-    credential_scopes = ["{}.default".format(base_url)]
-    resource_client = EventHubManagementClient(
-        get_devtools_credential(),
-        SUBSCRIPTION_ID,
-        base_url=base_url,
-        credential_scopes=credential_scopes,
-    )
     eventhub_name = EVENTHUB_PREFIX + str(uuid.uuid4())
     eventhub_ns_name, connection_string, key_name, primary_key = eventhub_namespace
     eventhub_endpoint_suffix = os.environ.get(
         "EVENT_HUB_ENDPOINT_SUFFIX", ".servicebus.windows.net"
     )
-    try:
-        eventhub = resource_client.event_hubs.create_or_update(
-            resource_group,
-            eventhub_ns_name,
-            eventhub_name,
-            {"partition_count": PARTITION_COUNT},
-        )
-        live_eventhub_config = {
-            "resource_group": resource_group,
-            "hostname": "{}{}".format(eventhub_ns_name, eventhub_endpoint_suffix),
-            "key_name": key_name,
-            "access_key": primary_key,
-            "namespace": eventhub_ns_name,
-            "event_hub": eventhub.name,
-            "consumer_group": "$Default",
-            "partition": "0",
-            "connection_str": connection_string + ";EntityPath=" + eventhub.name,
-        }
-        yield live_eventhub_config
-    finally:
+
+    # Use direct REST client if configured, otherwise fall back to ARM
+    if use_direct_rest_client():
+        direct_client = get_direct_rest_client()
         try:
-            resource_client.event_hubs.delete(
-                resource_group, eventhub_ns_name, eventhub_name
+            direct_client.create_event_hub(
+                eventhub_ns_name,
+                eventhub_name,
+                partition_count=PARTITION_COUNT,
             )
-        except:
-            warnings.warn(UserWarning("eventhub teardown failed"))
+            live_eventhub_config = {
+                "resource_group": resource_group,
+                "hostname": "{}{}".format(eventhub_ns_name, eventhub_endpoint_suffix),
+                "key_name": key_name,
+                "access_key": primary_key,
+                "namespace": eventhub_ns_name,
+                "event_hub": eventhub_name,
+                "consumer_group": "$Default",
+                "partition": "0",
+                "connection_str": connection_string + ";EntityPath=" + eventhub_name,
+            }
+            yield live_eventhub_config
+        finally:
+            try:
+                direct_client.delete_event_hub(eventhub_ns_name, eventhub_name)
+            except:
+                warnings.warn(UserWarning("eventhub teardown failed"))
+    else:
+        base_url = os.environ.get(
+            "EVENTHUB_RESOURCE_MANAGER_URL", "https://management.azure.com/"
+        )
+        credential_scopes = ["{}.default".format(base_url)]
+        resource_client = EventHubManagementClient(
+            get_devtools_credential(),
+            SUBSCRIPTION_ID,
+            base_url=base_url,
+            credential_scopes=credential_scopes,
+        )
+        try:
+            eventhub = resource_client.event_hubs.create_or_update(
+                resource_group,
+                eventhub_ns_name,
+                eventhub_name,
+                {"partition_count": PARTITION_COUNT},
+            )
+            live_eventhub_config = {
+                "resource_group": resource_group,
+                "hostname": "{}{}".format(eventhub_ns_name, eventhub_endpoint_suffix),
+                "key_name": key_name,
+                "access_key": primary_key,
+                "namespace": eventhub_ns_name,
+                "event_hub": eventhub.name,
+                "consumer_group": "$Default",
+                "partition": "0",
+                "connection_str": connection_string + ";EntityPath=" + eventhub.name,
+            }
+            yield live_eventhub_config
+        finally:
+            try:
+                resource_client.event_hubs.delete(
+                    resource_group, eventhub_ns_name, eventhub_name
+                )
+            except:
+                warnings.warn(UserWarning("eventhub teardown failed"))
 
 
 @pytest.fixture()

@@ -15,6 +15,7 @@ from azure.mgmt.eventhub.models import Eventhub, AccessRights
 from devtools_testutils import ResourceGroupPreparer, AzureMgmtPreparer, AzureTestError, FakeResource
 
 from devtools_testutils.resource_testcase import RESOURCE_GROUP_PARAM
+from eventhub_direct_rest_client import use_direct_rest_client, get_direct_rest_client
 
 EVENTHUB_DEFAULT_AUTH_RULE_NAME = "RootManageSharedAccessKey"
 EVENTHUB_NAMESPACE_PARAM = "eventhub_namespace"
@@ -177,10 +178,17 @@ class EventHubPreparer(_EventHubChildResourcePreparer):
 
     def create_resource(self, name, **kwargs):
         if self.is_live:
-            self.client = self.create_mgmt_client(EventHubManagementClient)
-            group = self._get_resource_group(**kwargs)
-            namespace = self._get_namespace(**kwargs)
-            self.resource = self.client.event_hubs.create_or_update(group.name, namespace.name, name, {})
+            if use_direct_rest_client():
+                # Use direct REST client instead of ARM
+                direct_client = get_direct_rest_client()
+                namespace = self._get_namespace(**kwargs)
+                direct_client.create_event_hub(namespace.name, name)
+                self.resource = FakeResource(name=name, id=name)
+            else:
+                self.client = self.create_mgmt_client(EventHubManagementClient)
+                group = self._get_resource_group(**kwargs)
+                namespace = self._get_namespace(**kwargs)
+                self.resource = self.client.event_hubs.create_or_update(group.name, namespace.name, name, {})
         else:
             self.resource = FakeResource(name=name, id=name)
         return {
@@ -189,9 +197,15 @@ class EventHubPreparer(_EventHubChildResourcePreparer):
 
     def remove_resource(self, name, **kwargs):
         if self.is_live:
-            group = self._get_resource_group(**kwargs)
-            namespace = self._get_namespace(**kwargs)
-            self.client.event_hubs.delete(group.name, namespace.name, name, polling=False)
+            if use_direct_rest_client():
+                # Use direct REST client instead of ARM
+                direct_client = get_direct_rest_client()
+                namespace = self._get_namespace(**kwargs)
+                direct_client.delete_event_hub(namespace.name, name)
+            else:
+                group = self._get_resource_group(**kwargs)
+                namespace = self._get_namespace(**kwargs)
+                self.client.event_hubs.delete(group.name, namespace.name, name, polling=False)
 
 
 class EventHubNamespaceAuthorizationRulePreparer(_EventHubChildResourcePreparer):
