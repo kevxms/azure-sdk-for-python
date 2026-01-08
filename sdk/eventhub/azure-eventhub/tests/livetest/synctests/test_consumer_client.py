@@ -163,7 +163,12 @@ def test_receive_partition(auth_credential_senders, uamqp_transport, client_args
             kwargs={"starting_position": "-1", "partition_id": "0"},
         )
         worker.start()
-        time.sleep(10)
+
+        elapsed_s = 0
+        while elapsed_s < 20 and on_event.received != 1:
+            time.sleep(2)
+            elapsed_s += 2
+
         assert on_event.received == 1
         assert on_event.partition_id == "0"
         assert on_event.consumer_group == "$default"
