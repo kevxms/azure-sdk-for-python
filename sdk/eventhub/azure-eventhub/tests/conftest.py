@@ -69,6 +69,20 @@ EVENTHUB_DEFAULT_AUTH_RULE_NAME = "RootManageSharedAccessKey"
 LOCATION = get_region_override("westus")
 
 
+def wait_until(timeout_ms: int, period_ms: int, predicate: Callable[[], bool], delay_ms: int = 0) -> bool:
+    if delay_ms > 0:
+        time.sleep(delay_ms / 1000.0)
+
+    elapsed_ms = 0
+    while elapsed_ms < timeout_ms:
+        if predicate():
+            return True
+        time.sleep(period_ms / 1000.0)
+        elapsed_ms += period_ms
+
+    return False
+
+
 @pytest.fixture(scope="function")
 def faultinjector(live_eventhub, request: pytest.FixtureRequest):
     test_name = request.node.name

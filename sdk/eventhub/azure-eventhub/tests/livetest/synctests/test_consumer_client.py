@@ -3,6 +3,7 @@ import pytest
 import threading
 import sys
 
+from conftest import wait_until
 from azure.eventhub import EventData
 from azure.eventhub import EventHubConsumerClient
 from azure.eventhub._eventprocessor.in_memory_checkpoint_store import (
@@ -342,8 +343,7 @@ def test_receive_batch_early_callback(auth_credential_senders, uamqp_transport, 
             },
         )
         worker.start()
-        time.sleep(10)
-        assert on_event_batch.received == 10
+        assert wait_until(20000, 2000, lambda: on_event_batch.received == 10)
     worker.join()
 
 
@@ -443,8 +443,7 @@ def test_receive_batch_large_event(auth_credential_senders, uamqp_transport, cli
             kwargs={"starting_position": "-1", "partition_id": "0", "prefetch": 2},
         )
         worker.start()
-        time.sleep(10)
-        assert on_event.received == 1
+        assert wait_until(20000, 2000, lambda: on_event.received == 1)
         assert on_event.partition_id == "0"
         assert on_event.consumer_group == "$default"
         assert on_event.fully_qualified_namespace == fully_qualified_namespace

@@ -8,6 +8,8 @@ import threading
 import pytest
 import time
 
+from conftest import wait_until
+
 try:
     import uamqp
 except (ModuleNotFoundError, ImportError):
@@ -248,7 +250,7 @@ def test_receive_over_websocket_sync(auth_credential_senders, uamqp_transport, c
             kwargs={"partition_id": "0", "starting_position": "-1"},
         )
         thread.start()
-        time.sleep(10)
+        assert wait_until(20000, 2000, lambda: len(on_event.received) == 6)
     assert len(on_event.received) == 6
     for ed in on_event.received:
         assert ed.correlation_id == message_id_base
