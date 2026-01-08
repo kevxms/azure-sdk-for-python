@@ -2,6 +2,7 @@ from .mgmt_testcase import AzureMgmtPreparer
 from .mgmt_recorded_testcase import AzureMgmtRecordedTestCase
 from .azure_recorded_testcase import AzureRecordedTestCase, get_credential
 from .azure_testcase import is_live, get_region_override
+from .direct_rest_client import DirectRestClient
 from .resource_testcase import (
     FakeResource,
     ResourceGroupPreparer,
@@ -125,4 +126,5 @@ __all__ = [
     "create_combined_bundle",
     "is_live_and_not_recording",
     "is_live_internal",
+    "DirectRestClient",
 ]
