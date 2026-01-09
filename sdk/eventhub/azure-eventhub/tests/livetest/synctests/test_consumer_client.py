@@ -165,10 +165,9 @@ def test_receive_partition(auth_credential_senders, uamqp_transport, client_args
         )
         worker.start()
 
-        elapsed_s = 0
-        while elapsed_s < 20 and on_event.received != 1:
-            time.sleep(2)
-            elapsed_s += 2
+        # CBS token auth can take 10-20 seconds in some environments,
+        # so allow 60 seconds total for the consumer to connect and receive
+        wait_until(60000, 2000, lambda: on_event.received == 1)
 
         assert on_event.received == 1
         assert on_event.partition_id == "0"
@@ -343,7 +342,7 @@ def test_receive_batch_early_callback(auth_credential_senders, uamqp_transport, 
             },
         )
         worker.start()
-        assert wait_until(20000, 2000, lambda: on_event_batch.received == 10)
+        assert wait_until(60000, 2000, lambda: on_event_batch.received == 10)
     worker.join()
 
 
@@ -443,7 +442,7 @@ def test_receive_batch_large_event(auth_credential_senders, uamqp_transport, cli
             kwargs={"starting_position": "-1", "partition_id": "0", "prefetch": 2},
         )
         worker.start()
-        assert wait_until(20000, 2000, lambda: on_event.received == 1)
+        assert wait_until(60000, 2000, lambda: on_event.received == 1)
         assert on_event.partition_id == "0"
         assert on_event.consumer_group == "$default"
         assert on_event.fully_qualified_namespace == fully_qualified_namespace
