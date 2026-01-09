@@ -302,28 +302,38 @@ def eventhub_namespace(resource_group):
     except KeyError:
         pytest.skip("AZURE_SUBSCRIPTION_ID defined")
         return
-    base_url = os.environ.get(
-        "EVENTHUB_RESOURCE_MANAGER_URL", "https://management.azure.com/"
-    )
-    credential_scopes = ["{}.default".format(base_url)]
-    resource_client = EventHubManagementClient(
-        get_devtools_credential(),
-        SUBSCRIPTION_ID,
-        base_url=base_url,
-        credential_scopes=credential_scopes,
-    )
+
     try:
         namespace_name = os.environ["EVENT_HUB_NAMESPACE"]
     except KeyError:
         warnings.warn(UserWarning("EVENT_HUB_NAMESPACE undefined - skipping test"))
         pytest.skip("EVENT_HUB_NAMESPACE defined")
 
-    key = resource_client.namespaces.list_keys(
-        resource_group, namespace_name, EVENTHUB_DEFAULT_AUTH_RULE_NAME
-    )
-    connection_string = key.primary_connection_string
-    key_name = key.key_name
-    primary_key = key.primary_key
+    # Use direct REST client if configured, otherwise fall back to ARM
+    if use_direct_rest_client():
+        direct_client = get_direct_rest_client()
+        keys_response = direct_client.list_keys(namespace_name, EVENTHUB_DEFAULT_AUTH_RULE_NAME)
+        connection_string = keys_response.get("primaryConnectionString")
+        key_name = keys_response.get("keyName")
+        primary_key = keys_response.get("primaryKey")
+    else:
+        base_url = os.environ.get(
+            "EVENTHUB_RESOURCE_MANAGER_URL", "https://management.azure.com/"
+        )
+        credential_scopes = ["{}.default".format(base_url)]
+        resource_client = EventHubManagementClient(
+            get_devtools_credential(),
+            SUBSCRIPTION_ID,
+            base_url=base_url,
+            credential_scopes=credential_scopes,
+        )
+        key = resource_client.namespaces.list_keys(
+            resource_group, namespace_name, EVENTHUB_DEFAULT_AUTH_RULE_NAME
+        )
+        connection_string = key.primary_connection_string
+        key_name = key.key_name
+        primary_key = key.primary_key
+
     return namespace_name, connection_string, key_name, primary_key
 
 
