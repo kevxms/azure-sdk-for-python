@@ -1,6 +1,7 @@
 import pytest
 import asyncio
 
+from conftest import wait_until_async
 from azure.core.tracing import SpanKind
 from azure.eventhub import EventData
 from azure.eventhub.aio import EventHubConsumerClient
@@ -75,7 +76,7 @@ async def test_receive_storage_checkpoint_async(
             live_eventhub["event_hub"],
             properties,
         )
-        await asyncio.sleep(10)
+        await wait_until_async(20000, 1000, lambda: len(sequence_numbers_0) == 10 and len(sequence_numbers_1) == 10)
 
     await task
     assert len(sequence_numbers_0) == 10
@@ -121,7 +122,7 @@ async def test_receive_no_partition_async(auth_credential_senders_async, uamqp_t
 
     async with client:
         task = asyncio.ensure_future(client.receive(on_event, starting_position="-1"))
-        await asyncio.sleep(10)
+        await wait_until_async(20000, 1000, lambda: on_event.received == 2)
         assert on_event.received == 2
 
         checkpoints = await list(client._event_processors.values())[0]._checkpoint_store.list_checkpoints(
@@ -160,7 +161,7 @@ async def test_receive_partition_async(auth_credential_senders_async, uamqp_tran
     on_event.received = 0
     async with client:
         task = asyncio.ensure_future(client.receive(on_event, partition_id="0", starting_position="-1"))
-        await asyncio.sleep(10)
+        await wait_until_async(20000, 1000, lambda: on_event.received == 1)
         assert on_event.received == 1
     await task
 
@@ -198,7 +199,7 @@ async def test_receive_load_balancing_async(auth_credentials_async, uamqp_transp
         task1 = asyncio.ensure_future(client1.receive(on_event, starting_position="-1"))
         await asyncio.sleep(3.3)
         task2 = asyncio.ensure_future(client2.receive(on_event, starting_position="-1"))
-        await asyncio.sleep(20)
+        await wait_until_async(40000, 1000, lambda: len(client1._event_processors[("$default", ALL_PARTITIONS)]._tasks) == 1 and len(client2._event_processors[("$default", ALL_PARTITIONS)]._tasks) == 1)
         assert len(client1._event_processors[("$default", ALL_PARTITIONS)]._tasks) == 1
         assert len(client2._event_processors[("$default", ALL_PARTITIONS)]._tasks) == 1
     await task1
@@ -239,7 +240,7 @@ async def test_receive_batch_no_max_wait_time_async(auth_credential_senders_asyn
 
     async with client:
         task = asyncio.ensure_future(client.receive_batch(on_event_batch, starting_position="-1"))
-        await asyncio.sleep(10)
+        await wait_until_async(20000, 1000, lambda: on_event_batch.received == 2)
         assert on_event_batch.received == 2
 
         checkpoints = await list(client._event_processors.values())[0]._checkpoint_store.list_checkpoints(
@@ -330,7 +331,7 @@ async def test_receive_batch_early_callback_async(auth_credential_senders_async,
                 partition_id="0",
             )
         )
-        await asyncio.sleep(10)
+        await wait_until_async(20000, 1000, lambda: on_event_batch.received == 10)
         assert on_event_batch.received == 10
     await task
 
@@ -373,7 +374,7 @@ async def test_receive_batch_tracing_async(auth_credential_senders_async, uamqp_
     # with fake_span(name="ReceiveSpan") as root_receive:
     async with client:
         task = asyncio.ensure_future(client.receive_batch(on_event_batch, max_batch_size=2, starting_position="-1"))
-        await asyncio.sleep(10)
+        await wait_until_async(20000, 1000, lambda: on_event_batch.received == 2)
         assert on_event_batch.received == 2
 
     await task
@@ -423,7 +424,7 @@ async def test_receive_batch_large_event_async(auth_credential_senders_async, ua
     on_event.received = 0
     async with client:
         task = asyncio.ensure_future(client.receive(on_event, partition_id="0", starting_position="-1", prefetch=2))
-        await asyncio.sleep(10)
+        await wait_until_async(20000, 1000, lambda: on_event.received == 1)
         assert on_event.received == 1
     await task
 

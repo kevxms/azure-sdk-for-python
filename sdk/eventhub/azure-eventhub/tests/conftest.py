@@ -39,6 +39,7 @@ import time
 import signal
 import ssl
 import functools
+import asyncio
 
 # Load environment variables from .env file automatically for all tests
 from dotenv import load_dotenv
@@ -78,6 +79,20 @@ def wait_until(timeout_ms: int, period_ms: int, predicate: Callable[[], bool], d
         if predicate():
             return True
         time.sleep(period_ms / 1000.0)
+        elapsed_ms += period_ms
+
+    return False
+
+
+async def wait_until_async(timeout_ms: int, period_ms: int, predicate: Callable[[], bool], delay_ms: int = 0) -> bool:
+    if delay_ms > 0:
+        await asyncio.sleep(delay_ms / 1000.0)
+
+    elapsed_ms = 0
+    while elapsed_ms < timeout_ms:
+        if predicate():
+            return True
+        await asyncio.sleep(period_ms / 1000.0)
         elapsed_ms += period_ms
 
     return False
