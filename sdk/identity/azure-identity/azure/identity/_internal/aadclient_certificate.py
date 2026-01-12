@@ -3,7 +3,8 @@
 # Licensed under the MIT License.
 # ------------------------------------
 import base64
-from typing import Optional
+import re
+from typing import List, Optional
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -11,14 +12,36 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.hazmat.backends import default_backend
 
 
+def _pem_to_x5c(pem_chain: str) -> List[str]:
+    """Convert a PEM certificate chain to x5c format (array of base64-encoded DER certificates).
+
+    :param str pem_chain: PEM-encoded certificate chain (may have newlines stripped)
+    :return: List of base64-encoded DER certificates for the x5c JWT header
+    :rtype: List[str]
+    """
+    # The pem_chain may have newlines stripped, so we need to handle both cases
+    # Pattern matches -----BEGIN CERTIFICATE----- followed by base64 content followed by -----END CERTIFICATE-----
+    cert_pattern = re.compile(
+        r"-----BEGIN CERTIFICATE-----(.+?)-----END CERTIFICATE-----",
+        re.DOTALL
+    )
+    x5c = []
+    for match in cert_pattern.finditer(pem_chain):
+        # Extract the base64 content and remove any whitespace/newlines
+        cert_b64 = match.group(1).replace("\n", "").replace("\r", "").replace(" ", "")
+        x5c.append(cert_b64)
+    return x5c
+
+
 class AadClientCertificate:
     """Wraps 'cryptography' to provide the crypto operations AadClient requires for certificate authentication.
 
     :param bytes pem_bytes: bytes of a a PEM-encoded certificate including the (RSA) private key
     :param bytes password: (optional) the certificate's password
+    :param str public_certificate: (optional) the public certificate chain for x5c claim (SNI authentication)
     """
 
-    def __init__(self, pem_bytes: bytes, password: Optional[bytes] = None) -> None:
+    def __init__(self, pem_bytes: bytes, password: Optional[bytes] = None, public_certificate: Optional[str] = None) -> None:
         private_key = serialization.load_pem_private_key(pem_bytes, password=password, backend=default_backend())
         if not isinstance(private_key, RSAPrivateKey):
             raise ValueError("The certificate must have an RSA private key because RS256 is used for signing")
@@ -29,6 +52,8 @@ class AadClientCertificate:
         sha256_fingerprint = cert.fingerprint(hashes.SHA256())
         self._thumbprint = base64.urlsafe_b64encode(fingerprint).decode("utf-8")
         self._sha256_thumbprint = base64.urlsafe_b64encode(sha256_fingerprint).decode("utf-8")
+
+        self._x5c = _pem_to_x5c(public_certificate) if public_certificate else None
 
     @property
     def thumbprint(self) -> str:

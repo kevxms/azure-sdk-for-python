@@ -258,6 +258,9 @@ class AadClientBase(abc.ABC):  # pylint: disable=too-many-instance-attributes
             headers["alg"] = "PS256"
             headers["x5t#S256"] = certificate.sha256_thumbprint
 
+        if certificate._x5c:
+            headers["x5c"] = certificate._x5c
+
         jwt_header = json.dumps(headers).encode("utf-8")
         payload = json.dumps(
             {

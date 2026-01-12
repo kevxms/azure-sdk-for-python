@@ -54,7 +54,9 @@ class CertificateCredential(AsyncContextManager, GetTokenMixin):
         client_credential = get_client_credential(certificate_path, **kwargs)
 
         self._certificate = AadClientCertificate(
-            client_credential["private_key"], password=client_credential.get("passphrase")
+            client_credential["private_key"],
+            password=client_credential.get("passphrase"),
+            public_certificate=client_credential.get("public_certificate")
         )
 
         self._client = AadClient(tenant_id, client_id, **kwargs)
