@@ -10,6 +10,7 @@ from uuid import uuid4
 
 import pytest
 
+from conftest import wait_until_async
 from azure.eventhub import EventData
 from azure.eventhub.aio import EventHubProducerClient, EventHubConsumerClient
 from azure.eventhub.aio._buffered_producer import PartitionResolver
@@ -217,7 +218,7 @@ async def test_basic_send_single_events_round_robin(
             assert sum([len(sent_events[pid]) for pid in partitions]) == total_single_event_cnt
 
         # give some time for producer to complete sending and consumer to complete receiving
-        await asyncio.sleep(10)
+        await wait_until_async(20000, 1000, lambda: len(sent_events) == len(received_events) == partitions_cnt, delay_ms=1000)
         assert len(sent_events) == len(received_events) == partitions_cnt
 
         for pid in partitions:
@@ -348,7 +349,7 @@ async def test_basic_send_batch_events_round_robin(
             # ensure all events are sent
             assert sum([len(sent_events[pid]) for pid in partitions]) == total_events_cnt
 
-        await asyncio.sleep(10)
+        await wait_until_async(20000, 1000, lambda: len(sent_events) == len(received_events) == partitions_cnt, delay_ms=1000)
         assert len(sent_events) == len(received_events) == partitions_cnt
 
         # ensure all events are received in the correct partition
@@ -561,7 +562,7 @@ async def test_send_with_timing_configuration(auth_credentials_async, uamqp_tran
         await producer.flush()
         assert sum([len(sent_events[pid]) for pid in partitions]) == 21
 
-    await asyncio.sleep(5)
+    await wait_until_async(10000, 1000, lambda: sum([len(received_events[pid]) for pid in partitions]) == 21, delay_ms=1000)
     assert sum([len(received_events[pid]) for pid in partitions]) == 21
     assert not on_error.err
     await consumer.close()
