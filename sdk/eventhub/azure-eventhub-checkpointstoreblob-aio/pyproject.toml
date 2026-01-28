@@ -40,7 +40,7 @@ version = {attr = "azure.eventhub.extensions.checkpointstoreblobaio._version.VER
 readme = {file = ["README.md"], content-type = "text/markdown"}
 
 [tool.setuptools.packages.find]
-exclude = ["samples*", "tests*", "doc*", "azure", "azure.eventhub", "azure.eventhub.extensions"]
+exclude = ["samples*", "tests*", "doc*"]
 
 [tool.setuptools.package-data]
 pytyped = ["py.typed"]

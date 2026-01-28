@@ -573,6 +573,12 @@ class TestTablesUnitTest(object):
 
 For information about more advanced testing scenarios, refer to the [advanced tests notes][advanced_tests_notes].
 
+## Package-specific testing guides
+
+Some packages have additional testing requirements. Refer to these guides for package-specific instructions:
+
+- [Azure Event Hubs][eventhub_tests] - Special setup for namespace packages and checkpoint stores
+
 <!-- Links -->
 
 [advanced_tests_notes]: https://github.com/Azure/azure-sdk-for-python/blob/main/doc/dev/tests-advanced.md
@@ -599,3 +605,4 @@ For information about more advanced testing scenarios, refer to the [advanced te
 [test_proxy_sanitizers]: https://github.com/Azure/azure-sdk-tools/blob/e14a7ddd90a6177b9b60e7a6486c03bf1fa31177/tools/test-proxy/Azure.Sdk.Tools.TestProxy/Common/SanitizerDictionary.cs#L65
 [test_resources]: https://github.com/Azure/azure-sdk-for-python/tree/main/eng/common/TestResources#readme
 [troubleshooting_guide]: https://github.com/Azure/azure-sdk-for-python/blob/main/doc/dev/test_proxy_troubleshooting.md
+[eventhub_tests]: https://github.com/Azure/azure-sdk-for-python/blob/main/sdk/eventhub/azure-eventhub/tests/tests-eventhub.md

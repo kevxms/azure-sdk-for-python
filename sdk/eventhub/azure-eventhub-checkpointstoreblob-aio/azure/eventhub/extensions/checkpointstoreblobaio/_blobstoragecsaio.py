@@ -8,7 +8,7 @@ import copy
 from collections import defaultdict
 import asyncio # pylint:disable=do-not-import-asyncio
 from azure.eventhub.exceptions import OwnershipLostError  # type: ignore
-from azure.eventhub.aio import CheckpointStore  # type: ignore
+from azure.eventhub.aio._eventprocessor.checkpoint_store import CheckpointStore  # type: ignore
 from azure.core.exceptions import ResourceModifiedError, ResourceExistsError, ResourceNotFoundError  # type: ignore
 from ._vendor.storage.blob.aio import ContainerClient, BlobClient
 from ._vendor.storage.blob._shared.base_client import parse_connection_str

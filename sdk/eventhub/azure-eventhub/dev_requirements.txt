@@ -5,5 +5,7 @@ azure-mgmt-eventhub<=10.1.0
 azure-mgmt-resource==20.0.0
 aiohttp>=3.11.0
 websocket-client
+# Note: Install checkpoint stores as non-editable to avoid namespace conflicts.
+# Use `python -m pytest` instead of `pytest` to ensure correct import resolution.
 ../azure-eventhub-checkpointstoreblob-aio
 ../azure-eventhub-checkpointstoreblob
